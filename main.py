@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException, Header
+from fastapi import FastAPI, Depends, HTTPException, Header, Response, Request
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 import models, schemas, database, auth
 from datetime import datetime, timedelta
@@ -6,6 +7,20 @@ from datetime import datetime, timedelta
 models.Base.metadata.create_all(bind=database.engine)
 
 app = FastAPI()
+
+# ✅ Allowed origins (React dev server)
+origins = [
+    "http://localhost:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,          # list of allowed origins
+    allow_credentials=True,         # required for cookies (refresh token)
+    allow_methods=["*"],            # allow all HTTP methods
+    allow_headers=["*"],            # allow all headers (Authorization, Content-Type, etc.)
+)
+
 
 # Dependency to get DB session
 def get_db():
@@ -28,16 +43,30 @@ def signup(user: schemas.UserCreate, db: Session = Depends(get_db)):
     return new_user
 
 @app.post("/login", response_model=schemas.Token)
-def login(user: schemas.UserCreate, db: Session = Depends(get_db)):
+def login(user: schemas.UserCreate, response: Response, db: Session = Depends(get_db)):
     db_user = db.query(models.User).filter(models.User.username == user.username).first()
     if not db_user or not auth.verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    
+
     access_token = auth.create_access_token({"sub": db_user.username})
     refresh_token = auth.create_refresh_token({"sub": db_user.username})
+
+    # Save refresh token in DB
     db.add(models.RefreshToken(user_id=db_user.id, token=refresh_token, expires_at=datetime.utcnow() + timedelta(days=7)))
     db.commit()
-    return {"access_token": access_token, "token_type": "bearer", "refresh_token": refresh_token}
+
+    # Set refresh token in HttpOnly cookie
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=True,        # set True in production (https)
+        samesite="lax",     # or "strict" depending on your case
+        max_age=7*24*60*60
+    )
+
+    return {"access_token": access_token, "token_type": "bearer"}
+
 
 @app.get("/me")
 def read_me(authorization: str = Header(...), db: Session = Depends(get_db)):
@@ -57,20 +86,25 @@ def read_me(authorization: str = Header(...), db: Session = Depends(get_db)):
     return {"id": user.id, "username": user.username}
 
 @app.post("/refresh", response_model=schemas.Token)
-def refresh_token(refresh_token: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
-    payload = auth.decode_refresh_token(refresh_token.refresh_token)
+def refresh_token(request: Request, db: Session = Depends(get_db)):
+    # Read refresh token from cookie
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Missing refresh token")
+
+    payload = auth.decode_refresh_token(refresh_token)
     if not payload:
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
-    
+
     username = payload.get("sub")
     user = db.query(models.User).filter(models.User.username == username).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    db_token = db.query(models.RefreshToken).filter(models.RefreshToken.token == refresh_token.refresh_token, models.RefreshToken.user_id == user.id).first()
+    db_token = db.query(models.RefreshToken).filter(models.RefreshToken.token == refresh_token, models.RefreshToken.user_id == user.id).first()
     if not db_token or db_token.expires_at < datetime.utcnow():
         raise HTTPException(status_code=401, detail="Refresh token expired or invalid")
 
     new_access_token = auth.create_access_token({"sub": user.username})
 
-    return {"access_token": new_access_token, "token_type": "bearer", "refresh_token": refresh_token.refresh_token}
+    return {"access_token": new_access_token, "token_type": "bearer"}
