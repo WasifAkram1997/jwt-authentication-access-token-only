@@ -1,0 +1,24 @@
+# Dependency directories
+node_modules
+npm-debug.log
+yarn-error.log
+
+# Production build output
+build
+dist
+
+# Environment files (if you don’t want secrets inside images)
+.env
+.env.local
+.env.development
+.env.production
+
+# Git & editor stuff
+.git
+.gitignore
+.dockerignore
+Dockerfile
+*.md
+.vscode
+.idea
+*.swp
