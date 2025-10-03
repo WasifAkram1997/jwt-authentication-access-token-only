@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import FastAPI, Depends, HTTPException, Header, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -111,8 +111,17 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
     return {"access_token": new_access_token, "token_type": "bearer"}
 
 @app.get("/products", response_model=List[schemas.ProductRead])
-def get_products(db : Session = Depends(get_db)):
-    products_list = db.query(models.Products).all()
+def get_products(category: Optional[str] = None, min_price: Optional[float] = None, max_price: Optional[float] =None,  db : Session = Depends(get_db)):
+    query = db.query(models.Products)
+    if category:
+        query = query.filter(models.Products.category == category)
+    if min_price:
+        query = query.filter(models.Products.price >= min_price)
+    if max_price:
+        query = query.filter(models.Products.price <= max_price)
+
+    products_list = query.all()
+
     return products_list
 
 @app.get("/products/{id}", response_model=schemas.ProductRead)
@@ -125,8 +134,14 @@ def create(product: schemas.ProductCreate, db: Session = Depends(get_db)):
     db_product = db.query(models.Products).filter(models.Products.name == product.name).first()
     if db_product:
         raise HTTPException(status_code=400, detail="Product already exists")
-    new_product = models.Products(name=product.name)
+    new_product = models.Products(name=product.name,category=product.category,description=product.description,price=product.price)
     db.add(new_product)
     db.commit()
     db.refresh(new_product)
-    return new_product
+    return
+#
+# @app.get("/products/maal", response_model=List[schemas.ProductRead])
+#
+# def get_product(category:str , db: Session = Depends(get_db)):
+#     product_list = db.query(models.Products).filter(models.Products.category == category ).all()
+#     return product_list
