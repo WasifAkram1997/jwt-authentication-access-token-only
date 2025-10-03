@@ -1,3 +1,4 @@
+from typing import List
 from fastapi import FastAPI, Depends, HTTPException, Header, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -108,3 +109,13 @@ def refresh_token(request: Request, db: Session = Depends(get_db)):
     new_access_token = auth.create_access_token({"sub": user.username})
 
     return {"access_token": new_access_token, "token_type": "bearer"}
+
+@app.get("/products", response_model=List[schemas.ProductRead])
+def get_products(db : Session = Depends(get_db)):
+    products_list = db.query(models.Products).all()
+    return products_list
+
+@app.get("/products/{id}", response_model=schemas.ProductRead)
+def get_product(id, db: Session = Depends(get_db)):
+    product = db.query(models.Products).filter(models.Products.id == id ).first()
+    return product
