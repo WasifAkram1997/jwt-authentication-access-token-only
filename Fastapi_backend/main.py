@@ -119,3 +119,14 @@ def get_products(db : Session = Depends(get_db)):
 def get_product(id, db: Session = Depends(get_db)):
     product = db.query(models.Products).filter(models.Products.id == id ).first()
     return product
+
+@app.post("/products", response_model=schemas.ProductRead)
+def create(product: schemas.ProductCreate, db: Session = Depends(get_db)):
+    db_product = db.query(models.Products).filter(models.Products.name == product.name).first()
+    if db_product:
+        raise HTTPException(status_code=400, detail="Product already exists")
+    new_product = models.Products(name=product.name)
+    db.add(new_product)
+    db.commit()
+    db.refresh(new_product)
+    return new_product

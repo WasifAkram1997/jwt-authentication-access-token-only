@@ -20,4 +20,7 @@ class RefreshTokenRequest(BaseModel):
 
 class ProductRead(BaseModel):
     id: int
-    name: str        
+    name: str     
+
+class ProductCreate(BaseModel):
+    name: str   
