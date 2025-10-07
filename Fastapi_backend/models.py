@@ -24,3 +24,15 @@ class Products(Base):
     category=Column(String, nullable=False)
     description = Column(String, nullable=False)
     price = Column(Float, nullable=False)
+
+class Roles(Base):
+    __tablename__ = "roles"
+    id = Column(Integer, primary_key=True, index=True)
+    role = Column(String, unique=True, index=True, nullable=False)
+
+class UserRoles(Base):
+    __tablename__ = "user_roles"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"))
+    role_id = Column(Integer, ForeignKey("roles.id"))
+
